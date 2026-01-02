@@ -1,0 +1,10 @@
+Winter Story Website Prompt
+You are a web designer helping me create a beautiful single-page website for a short story.
+
+  I will give you:
+  - The full text of my story (about the theme “Winter”)
+  - Exactly 5 images to use in the page
+
+  Your job:
+
+  1. Create ONE complete HTML file (including a

@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Story Viewer</title>
+  <style>
+    body {
+      font-family: Segoe UI, Arial, Helvetica, sans-serif;
+      padding: 20px
+    }
+
+    #controls {
+      margin-bottom: 12px
+    }
+
+    button {
+      margin-right: 6px;
+      padding: 6px 10px
+    }
+
+    select,
+    input {
+      margin-right: 6px
+    }
+
+    pre {
+      white-space: pre-wrap;
+      border: 1px solid #ddd;
+      padding: 12px;
+      background: #fff
+    }
+  </style>
+</head>
+
+<body>
+  <a href="index.html">← Back</a>
+  <h1 id="title">Story</h1>
+
+  <div id="controls">
+    <label>Voice: <select id="voiceSelect"></select></label>
+    <label>Rate: <input id="rate" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+    <label>Pitch: <input id="pitch" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+    <button id="play">Play (Browser)</button>
+    <button id="pause">Pause</button>
+    <button id="resume">Resume</button>
+    <button id="stop">Stop</button>
+
+    <!-- ElevenLabs controls -->
+    <div style="margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px;">
+      <strong>ElevenLabs</strong>
+      <input id="elevenKey" type="password" placeholder="API Key" style="width:200px">
+      <button id="fetchVoices">Refresh Voices</button>
+      <select id="elevenVoices" style="min-width:220px">
+        <option value="">Loading voices...</option>
+      </select>
+      <button id="playEleven"
+        style="font-weight:bold; color: #fff; background-color: #007bff; border: none; border-radius: 4px;">Play
+        (ElevenLabs)</button>
+      <span id="elevenStatus" style="font-size: 0.9em; margin-left:10px; color:#666"></span>
+    </div>
+
+    <label style="margin-left:8px; display: block; margin-top: 10px;">
+      <input id="autoRead" type="checkbox"> Auto-read on open (Browser TTS)
+    </label>
+  </div>
+
+  <pre id="content">Loading...</pre>
+
+  <script>
+    function qs(name) {
+      const params = new URLSearchParams(location.search);
+      return params.get(name);
+    }
+
+    const file = qs('file');
+    if (!file) { document.getElementById('content').textContent = 'No file specified.'; }
+
+    async function loadStory() {
+      try {
+        const decoded = decodeURIComponent(file);
+        document.getElementById('title').textContent = decoded.replace(/\.txt$/i, '');
+        const res = await fetch('stories/' + encodeURIComponent(decoded));
+        if (!res.ok) throw new Error('Failed to fetch story: ' + res.status);
+        const text = await res.text();
+        document.getElementById('content').textContent = text;
+        if (document.getElementById('autoRead').checked) startSpeaking();
+      } catch (e) {
+        document.getElementById('content').textContent = 'Error loading story: ' + e.message;
+      }
+    }
+
+    // --- Browser TTS (Fallback) ---
+    let synth = window.speechSynthesis;
+    let utter = null;
+
+    function populateVoices() {
+      const sel = document.getElementById('voiceSelect');
+      sel.innerHTML = '';
+      const voices = synth.getVoices();
+      for (const v of voices) {
+        const o = document.createElement('option');
+        o.value = v.name + '||' + v.lang;
+        o.textContent = v.name + ' (' + v.lang + ')';
+        sel.appendChild(o);
+      }
+    }
+    if (synth) {
+      populateVoices();
+      synth.onvoiceschanged = populateVoices;
+    }
+
+    function startSpeaking() {
+      if (!synth) return alert('SpeechSynthesis not supported in this browser.');
+      const text = document.getElementById('content').textContent.trim();
+      if (!text) return;
+      stopAll();
+      utter = new SpeechSynthesisUtterance(text);
+      const sel = document.getElementById('voiceSelect');
+      if (sel.value) {
+        const [name, lang] = sel.value.split('||');
+        const v = synth.getVoices().find(x => x.name === name && x.lang === lang);
+        if (v) utter.voice = v;
+      }
+      utter.rate = parseFloat(document.getElementById('rate').value);
+      utter.pitch = parseFloat(document.getElementById('pitch').value);
+      synth.speak(utter);
+    }
+
+    function stopSpeaking() { if (synth) { synth.cancel(); utter = null; } }
+    function pauseSpeaking() { if (synth) synth.pause(); }
+    function resumeSpeaking() { if (synth) synth.resume(); }
+
+    document.getElementById('play').addEventListener('click', startSpeaking);
+    document.getElementById('stop').addEventListener('click', stopAll);
+    document.getElementById('pause').addEventListener('click', pauseSpeaking);
+    document.getElementById('resume').addEventListener('click', resumeSpeaking);
+
+
+    // --- ElevenLabs Integration ---
+
+    let elAudioQueue = [];
+    let elIsPlaying = false;
+    let elAbortController = null; // to cancel fetches
+
+    async function initElevenLabs() {
+      let key = '';
+
+      // 1. Try local file
+      try {
+        const resp = await fetch('eleven.txt');
+        if (resp.ok) {
+          key = (await resp.text()).trim();
+        }
+      } catch (e) {
+        console.log('Could not load eleven.txt', e);
+      }
+
+      // 2. Fallback to Netlify function
+      if (!key) {
+        console.log('eleven.txt missing or empty, trying Netlify function...');
+        try {
+          const resp = await fetch('/.netlify/functions/get_eleven_key');
+          if (resp.ok) {
+            key = (await resp.text()).trim();
+          }
+        } catch (e) {
+          console.log('Could not load key from Netlify function', e);
+        }
+      }
+
+      if (key) {
+        document.getElementById('elevenKey').value = key;
+        fetchElevenVoices(key);
+      }
+    }
+
+    async function fetchElevenVoices(key) {
+      const sel = document.getElementById('elevenVoices');
+      if (!key) key = document.getElementById('elevenKey').value.trim();
+      if (!key) {
+        sel.innerHTML = '<option value="">No API Key</option>';
+        return;
+      }
+
+      try {
+        const res = await fetch('https://api.elevenlabs.io/v1/voices', {
+          headers: { 'xi-api-key': key }
+        });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          throw new Error(`Status ${res.status} ${errText}`);
+        }
+        const data = await res.json();
+        sel.innerHTML = '';
+        (data.voices || []).forEach(v => {
+          const o = document.createElement('option');
+          o.value = v.voice_id;
+          o.textContent = v.name;
+          sel.appendChild(o);
+        });
+      } catch (e) {
+        console.error(e);
+        sel.innerHTML = `<option value="">Error: ${e.message}</option>`;
+      }
+    }
+
+    document.getElementById('fetchVoices').addEventListener('click', () => fetchElevenVoices());
+
+    // Helper to split text into manageable chunks
+    function splitText(text, maxChunkSize = 2000) {
+      // Simple splitting by sentence endings to avoid cutting words
+      // This is a naive implementation, but sufficient for basic stories
+      const regex = /[^.!?\n]+[.!?\n]+/g;
+      let match;
+      const chunks = [];
+      let currentChunk = '';
+
+      while ((match = regex.exec(text)) !== null) {
+        if (currentChunk.length + match[0].length > maxChunkSize) {
+          chunks.push(currentChunk.trim());
+          currentChunk = match[0];
+        } else {
+          currentChunk += match[0];
+        }
+      }
+      if (currentChunk.trim()) chunks.push(currentChunk.trim());
+
+      // If regex failed to find sentences (e.g. no punctuation), fall back to hard split
+      if (chunks.length === 0 && text.trim()) {
+        return [text]; // or improve this to split by spaces
+      }
+
+      return chunks;
+    }
+
+    async function playElevenLabs() {
+      stopAll();
+      const key = document.getElementById('elevenKey').value.trim();
+      const voiceId = document.getElementById('elevenVoices').value;
+      const text = document.getElementById('content').textContent;
+
+      if (!key) return alert('Please enter an ElevenLabs API Key');
+      if (!voiceId) return alert('Please select a voice');
+      if (!text) return;
+
+      const statusEl = document.getElementById('elevenStatus');
+      statusEl.textContent = 'Preparing...';
+
+      elAbortController = new AbortController();
+      const signal = elAbortController.signal;
+
+      const chunks = splitText(text);
+      let chunkIndex = 0;
+
+      // We will fetch chunks sequentially or with a slight lookahead. 
+      // For simplicity, let's fetch one, play it, fetch next. 
+      // A more advanced version would buffer.
+
+      async function playNextChunk() {
+        if (chunkIndex >= chunks.length || signal.aborted) {
+          statusEl.textContent = 'Finished.';
+          return;
+        }
+
+        statusEl.textContent = `Streaming chunk ${chunkIndex + 1}/${chunks.length}...`;
+
+        try {
+          const chunkText = chunks[chunkIndex];
+          const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+            method: 'POST',
+            headers: {
+              'xi-api-key': key,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              text: chunkText,
+              model_id: "eleven_multilingual_v2", // Updated for free tier support
+              voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+            }),
+            signal: signal
+          });
+
+          if (!resp.ok) {
+            const err = await resp.text();
+            throw new Error('API Error: ' + err);
+          }
+
+          // Get blob and play
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          elAudioQueue.push(audio); // keep track to stop if needed
+
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            // Remove from queue
+            const idx = elAudioQueue.indexOf(audio);
+            if (idx > -1) elAudioQueue.splice(idx, 1);
+            // Next
+            chunkIndex++;
+            playNextChunk();
+          };
+
+          // Handle playback errors
+          audio.onerror = (e) => {
+            console.error('Audio playback error', e);
+            chunkIndex++; // playback failed, skip to next?
+            playNextChunk();
+          };
+
+          await audio.play();
+
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+          console.error(e);
+          statusEl.textContent = 'Error: ' + e.message;
+        }
+      }
+
+      playNextChunk();
+    }
+
+    document.getElementById('playEleven').addEventListener('click', playElevenLabs);
+
+    function stopAll() {
+      // Stop browser TTS
+      stopSpeaking();
+
+      // Stop ElevenLabs
+      if (elAbortController) {
+        elAbortController.abort();
+        elAbortController = null;
+      }
+      elAudioQueue.forEach(a => {
+        a.pause();
+        a.src = '';
+      });
+      elAudioQueue = [];
+      document.getElementById('elevenStatus').textContent = '';
+    }
+
+
+    if (file) loadStory();
+    initElevenLabs();
+  </script>
+</body>
+
+</html>
