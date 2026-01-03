@@ -58,6 +58,10 @@
       </select>
       <button id="playOpenAI"
         style="font-weight:bold; color: #fff; background-color: #10a37f; border: none; border-radius: 4px;">Play</button>
+      <button id="pause"
+        style="background-color: #ffc107; color: black; border: none; border-radius: 4px;">Pause</button>
+      <button id="resume"
+        style="background-color: #007bff; color: white; border: none; border-radius: 4px;">Resume</button>
       <button id="stop" style="background-color: #dc3545; color: white; border: none; border-radius: 4px;">Stop</button>
       <span id="openaiStatus" style="font-size: 0.9em; margin-left:10px; color:#666"></span>
     </div>
@@ -94,6 +98,20 @@
 
     document.getElementById('playOpenAI').addEventListener('click', () => playOpenAI());
     document.getElementById('stop').addEventListener('click', stopAll);
+    document.getElementById('pause').addEventListener('click', pauseAudio);
+    document.getElementById('resume').addEventListener('click', resumeAudio);
+
+    function pauseAudio() {
+      if (audioQueue.length > 0) {
+        audioQueue[0].pause();
+      }
+    }
+
+    function resumeAudio() {
+      if (audioQueue.length > 0) {
+        audioQueue[0].play();
+      }
+    }
 
     // Helper to split text into manageable chunks
     function splitText(text, maxChunkSize = 2000) {
