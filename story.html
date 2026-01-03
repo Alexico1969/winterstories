@@ -39,6 +39,11 @@
   <h1 id="title">Story</h1>
 
   <div id="controls">
+    <div style="margin-bottom: 10px;">
+      <button id="fontUp" title="Increase Font Size">A+</button>
+      <button id="fontDown" title="Decrease Font Size">A-</button>
+    </div>
+
     <!-- OpenAI controls -->
     <div style="margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px;">
       <strong>OpenAI TTS</strong>
@@ -218,6 +223,19 @@
 
       if (key) document.getElementById('openaiKey').value = key;
     }
+
+    let currentFontSize = 16;
+    const contentEl = document.getElementById('content');
+
+    document.getElementById('fontUp').addEventListener('click', () => {
+      currentFontSize += 2;
+      contentEl.style.fontSize = currentFontSize + 'px';
+    });
+
+    document.getElementById('fontDown').addEventListener('click', () => {
+      currentFontSize = Math.max(8, currentFontSize - 2);
+      contentEl.style.fontSize = currentFontSize + 'px';
+    });
 
     if (file) loadStory();
     initOpenAI();

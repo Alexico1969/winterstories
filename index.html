@@ -1,25 +1,63 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Stories Index</title>
   <style>
-    body{font-family:Segoe UI,Arial,Helvetica,sans-serif;padding:20px}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border:1px solid #ddd;text-align:left}
-    th{background:#f4f4f4}
-    tr:hover{background:#f9f9f9}
-    a{color:#0066cc;text-decoration:none}
-    input[type=text]{padding:6px;width:300px;margin-bottom:10px}
+    body {
+      font-family: Segoe UI, Arial, Helvetica, sans-serif;
+      padding: 20px
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border: 1px solid #ddd;
+      text-align: left
+    }
+
+    th {
+      background: #f4f4f4
+    }
+
+    tr:hover {
+      background: #f9f9f9
+    }
+
+    a {
+      color: #0066cc;
+      text-decoration: none
+    }
+
+    input[type=text] {
+      padding: 6px;
+      width: 300px;
+      margin-bottom: 10px
+    }
   </style>
 </head>
+
 <body>
   <h1>Stories</h1>
+  <a href="https://docs.google.com/spreadsheets/d/1D8IoxS8wWZtwMnvEc2ZnCYZmZAMhXqvPWgIYnmBWu0g" target="_blank"
+    style="position:absolute; top:20px; right:20px; background:#4CAF50; color:white; padding:10px 15px; text-decoration:none; border-radius:4px; font-weight:bold;">Google
+    Sheet</a>
   <p>Click a story to open it in a new tab and hear it read aloud.</p>
   <input id="filter" type="text" placeholder="Filter by name..." />
   <table id="storiesTable">
-    <thead><tr><th>Story</th><th>File</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Story</th>
+        <th>File</th>
+      </tr>
+    </thead>
     <tbody></tbody>
   </table>
 
@@ -28,28 +66,29 @@
       const res = await fetch('stories.json');
       const list = await res.json();
       const tbody = document.querySelector('#storiesTable tbody');
-      function render(filter=''){
-        tbody.innerHTML='';
-        const filtered = list.filter(f=>f.toLowerCase().includes(filter.toLowerCase()));
-        filtered.sort((a,b)=>a.localeCompare(b));
-        for(const fname of filtered){
-          const tr=document.createElement('tr');
-          const title=fname.replace(/\.txt$/i,'');
-          const a=document.createElement('a');
-          a.href='story.html?file='+encodeURIComponent(fname);
-          a.target='_blank';
-          a.rel='noopener';
-          a.textContent=title;
-          const td1=document.createElement('td'); td1.appendChild(a);
-          const td2=document.createElement('td'); td2.textContent=fname;
+      function render(filter = '') {
+        tbody.innerHTML = '';
+        const filtered = list.filter(f => f.toLowerCase().includes(filter.toLowerCase()));
+        filtered.sort((a, b) => a.localeCompare(b));
+        for (const fname of filtered) {
+          const tr = document.createElement('tr');
+          const title = fname.replace(/\.txt$/i, '');
+          const a = document.createElement('a');
+          a.href = 'story.html?file=' + encodeURIComponent(fname);
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = title;
+          const td1 = document.createElement('td'); td1.appendChild(a);
+          const td2 = document.createElement('td'); td2.textContent = fname;
           tr.appendChild(td1); tr.appendChild(td2);
           tbody.appendChild(tr);
         }
       }
-      document.getElementById('filter').addEventListener('input',e=>render(e.target.value));
+      document.getElementById('filter').addEventListener('input', e => render(e.target.value));
       render('');
     }
-    load().catch(err=>{console.error(err); document.body.insertAdjacentHTML('beforeend','<p style="color:red">Failed to load stories.json</p>')});
+    load().catch(err => { console.error(err); document.body.insertAdjacentHTML('beforeend', '<p style="color:red">Failed to load stories.json</p>') });
   </script>
 </body>
+
 </html>
